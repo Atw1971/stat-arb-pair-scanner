@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR=""
 PROJECT_HINT_FILE="$SCRIPT_DIR/../Resources/project_path.txt"
+COMMAND_PATH=""
 
 if [[ -f "$PROJECT_HINT_FILE" ]]; then
   hinted_path="$(<"$PROJECT_HINT_FILE")"
@@ -40,5 +41,22 @@ if [[ -z "$PROJECT_DIR" ]]; then
   exit 1
 fi
 
-cd "$PROJECT_DIR"
-exec ./start_stat_arb_pair_scanner.command
+if [[ -x "$HOME/Desktop/Stat Arb Pair Scanner.command" ]]; then
+  COMMAND_PATH="$HOME/Desktop/Stat Arb Pair Scanner.command"
+else
+  COMMAND_PATH="$PROJECT_DIR/start_stat_arb_pair_scanner.command"
+fi
+
+if [[ ! -x "$COMMAND_PATH" ]]; then
+  /usr/bin/osascript -e 'display alert "Stat Arb Pair Scanner" message "พบโปรเจกต์แล้ว แต่หา command launcher ไม่เจอ กรุณารัน install_desktop_app.command อีกครั้ง"' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+/usr/bin/osascript <<APPLESCRIPT >/dev/null 2>&1 || true
+tell application "Terminal"
+  activate
+  do script quoted form of "$COMMAND_PATH"
+end tell
+APPLESCRIPT
+
+exit 0

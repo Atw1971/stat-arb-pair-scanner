@@ -45,6 +45,32 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## ติดตั้งตัวเปิดบน Desktop
+
+หลังจาก clone repo แล้ว สามารถสร้างตัวเปิดบน Desktop ได้ด้วย:
+
+```bash
+./install_desktop_app.command
+```
+
+คำสั่งนี้จะสร้าง:
+
+- `Stat Arb Pair Scanner.app`
+- `Stat Arb Pair Scanner.command`
+
+ทั้ง `.app` และ `.command` ใช้ launcher ชุดเดียวกัน:
+
+- หาโฟลเดอร์โปรเจกต์อัตโนมัติ
+- สร้าง `.venv` ถ้ายังไม่มี
+- ติดตั้ง dependency ให้ตรงกับเครื่องนั้น
+- รอให้ Streamlit พร้อมก่อนแล้วค่อยเปิด browser
+
+ถ้าเปิดไม่ขึ้น ให้ดู log ในโฟลเดอร์ `reports/`:
+
+- `reports/stat_arb_pair_scanner.log`
+- `reports/stat_arb_pair_scanner_bootstrap.log`
+- `reports/stat_arb_pair_scanner_install.log`
+
 หมายเหตุสำหรับ Mac mini:
 
 - โปรเจกต์นี้ใช้ `Python 3.8` ได้ แต่ต้อง pin `multitasking<0.0.12` เพื่อให้ `yfinance` ทำงานได้

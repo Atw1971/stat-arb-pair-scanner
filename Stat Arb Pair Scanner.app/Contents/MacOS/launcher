@@ -16,8 +16,10 @@ fi
 if [[ -z "$PROJECT_DIR" ]]; then
   for candidate in \
     "$(cd "$SCRIPT_DIR/../../.." && pwd)" \
+    "$SCRIPT_DIR/stat-arb-pair-scanner" \
+    "$HOME/Documents/Codex/2026-05-26/new-chat" \
     "$HOME/Documents/stat-arb-pair-scanner" \
-    "$HOME/Documents/Codex/2026-05-26/new-chat"
+    "$HOME/Documents/GitHub/stat-arb-pair-scanner"
   do
     if [[ -f "$candidate/start_stat_arb_pair_scanner.command" ]]; then
       PROJECT_DIR="$candidate"
@@ -26,8 +28,15 @@ if [[ -z "$PROJECT_DIR" ]]; then
   done
 fi
 
+if [[ -z "$PROJECT_DIR" && -d "$HOME" ]]; then
+  found="$(find "$HOME" -maxdepth 6 -path '*/stat-arb-pair-scanner/start_stat_arb_pair_scanner.command' -print -quit 2>/dev/null || true)"
+  if [[ -n "$found" ]]; then
+    PROJECT_DIR="$(dirname "$found")"
+  fi
+fi
+
 if [[ -z "$PROJECT_DIR" ]]; then
-  /usr/bin/osascript -e 'display alert "Stat Arb Pair Scanner" message "หาโฟลเดอร์โปรเจกต์ไม่เจอ กรุณา clone repo แล้วรัน install_desktop_app.command ก่อน"' >/dev/null 2>&1 || true
+  /usr/bin/osascript -e 'display alert "Stat Arb Pair Scanner" message "หาโฟลเดอร์โปรเจกต์ไม่เจอ กรุณา clone repo ชื่อ stat-arb-pair-scanner แล้วรัน install_desktop_app.command ก่อน"' >/dev/null 2>&1 || true
   exit 1
 fi
 

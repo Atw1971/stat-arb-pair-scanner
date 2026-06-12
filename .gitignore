@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.streamlit/
+.venv/
+venv/
+env/
+exports/
+data/research_*/
+data/execution_*/
+*.log

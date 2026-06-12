@@ -1,0 +1,35 @@
+#!/bin/zsh
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR=""
+PROJECT_HINT_FILE="$SCRIPT_DIR/../Resources/project_path.txt"
+
+if [[ -f "$PROJECT_HINT_FILE" ]]; then
+  hinted_path="$(<"$PROJECT_HINT_FILE")"
+  if [[ -f "$hinted_path/start_stat_arb_pair_scanner.command" ]]; then
+    PROJECT_DIR="$hinted_path"
+  fi
+fi
+
+if [[ -z "$PROJECT_DIR" ]]; then
+  for candidate in \
+    "$(cd "$SCRIPT_DIR/../../.." && pwd)" \
+    "$HOME/Documents/stat-arb-pair-scanner" \
+    "$HOME/Documents/Codex/2026-05-26/new-chat"
+  do
+    if [[ -f "$candidate/start_stat_arb_pair_scanner.command" ]]; then
+      PROJECT_DIR="$candidate"
+      break
+    fi
+  done
+fi
+
+if [[ -z "$PROJECT_DIR" ]]; then
+  /usr/bin/osascript -e 'display alert "Stat Arb Pair Scanner" message "หาโฟลเดอร์โปรเจกต์ไม่เจอ กรุณา clone repo แล้วรัน install_desktop_app.command ก่อน"' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+cd "$PROJECT_DIR"
+exec ./start_stat_arb_pair_scanner.command

@@ -1,0 +1,13 @@
+{
+  "data_dir": "data",
+  "lookback": 120,
+  "entry_z": 2.0,
+  "exit_z": 0.5,
+  "stop_z": 3.5,
+  "min_correlation": 0.75,
+  "max_half_life": 80,
+  "min_half_life": 2,
+  "max_cost_bps": 8,
+  "risk_per_trade": 0.01,
+  "max_position_value": 10000
+}

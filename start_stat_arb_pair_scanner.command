@@ -32,6 +32,26 @@ port_listening() {
   lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1
 }
 
+stop_existing_server() {
+  local pids
+  pids="$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -z "$pids" ]]; then
+    return 0
+  fi
+
+  write_log "Stopping existing Streamlit server on port $PORT: $pids"
+  kill $pids >/dev/null 2>&1 || true
+  for _ in $(seq 1 10); do
+    if ! port_listening; then
+      return 0
+    fi
+    sleep 1
+  done
+  write_log "Existing server did not stop cleanly; force stopping: $pids"
+  kill -9 $pids >/dev/null 2>&1 || true
+  sleep 1
+}
+
 ensure_environment() {
   if ! command -v python3 >/dev/null 2>&1; then
     show_alert "ไม่พบ python3 บนเครื่อง จึงยังเปิด Stat Arb Pair Scanner ไม่ได้"
@@ -41,6 +61,13 @@ ensure_environment() {
   if [[ ! -x "$PYTHON_BIN" ]]; then
     write_log "Creating virtual environment at $VENV_DIR"
     python3 -m venv "$VENV_DIR"
+  fi
+
+  if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+    write_log "Virtual environment is missing pip; rebuilding $VENV_DIR"
+    rm -rf "$VENV_DIR"
+    python3 -m venv "$VENV_DIR"
+    "$PYTHON_BIN" -m ensurepip --upgrade >"$BOOTSTRAP_LOG" 2>&1 || true
   fi
 
   write_log "Installing and refreshing Python dependencies"
@@ -71,14 +98,7 @@ wait_for_health() {
 cd "$PROJECT_DIR"
 ensure_environment
 
-if port_listening; then
-  write_log "Server already listening on port $PORT; opening existing app"
-  if /usr/bin/open "$APP_URL"; then
-    exit 0
-  fi
-  show_alert "พบ server ของ Stat Arb Pair Scanner แล้ว แต่เปิดหน้าเว็บไม่สำเร็จ ดู log ได้ที่ $LOG_FILE"
-  exit 1
-fi
+stop_existing_server
 
 start_server
 

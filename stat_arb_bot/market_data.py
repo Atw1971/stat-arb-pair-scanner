@@ -32,11 +32,15 @@ def parse_symbol_list(raw: str) -> list[SymbolSpec]:
         token = item.strip()
         if not token:
             continue
-        if "=" in token:
+        upper_token = token.upper()
+        if token.count("=") == 1 and (upper_token.endswith("=X") or upper_token.endswith("=F")):
+            symbol = upper_token.split("=", 1)[0].replace("/", "")
+            specs.append(SymbolSpec(symbol, token.strip()))
+        elif "=" in token:
             symbol, provider_symbol = token.split("=", 1)
             specs.append(SymbolSpec(symbol.strip().upper(), provider_symbol.strip()))
         else:
-            normalized = token.upper().replace("/", "")
+            normalized = upper_token.replace("/", "")
             specs.append(SymbolSpec(normalized, DEFAULT_SYMBOLS.get(normalized, token.strip())))
     return specs
 

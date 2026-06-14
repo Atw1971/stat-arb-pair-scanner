@@ -16,6 +16,7 @@ from stat_arb_bot.scanner import scan_pair_diagnostics, scan_pairs
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 EXPORT_DIR = ROOT / "exports"
+APP_BUILD = "symbol-check-2026-06-14"
 
 report_module = importlib.reload(report_module)
 build_trade_plan = report_module.build_trade_plan
@@ -311,7 +312,6 @@ def render_plan_cards(plan_df: pd.DataFrame) -> None:
         research_days = values.get("research_half_life_days", values.get("research_half_life", 0.0))
         risk_warning = str(values.get("risk_warning", ""))
         with column:
-            st.container(border=True)
             with st.container(border=True):
                 st.markdown(f"**{values['symbol_a']} / {values['symbol_b']}**")
                 st.write(
@@ -439,14 +439,70 @@ def render_symbol_status(status_df: pd.DataFrame) -> None:
     st.subheader("0 ตรวจ Symbols")
     st.caption("เช็กก่อนว่า symbol ที่พิมพ์ไว้โหลดราคาได้จริงไหม ถ้าขึ้น MISSING หรือ NO_DATA คู่นั้นจะไม่ถูกนำไป scan.")
     visible = ["symbol", "provider_symbol", "data", "status", "bars", "first", "last", "detail"]
-    st.dataframe(status_df[visible], use_container_width=True)
     bad = status_df[status_df["status"] != "OK"]
     if not bad.empty:
-        st.warning(
+        bad_symbols = sorted(set(bad["symbol"].astype(str).tolist()))
+        st.error(
             "มี symbol ที่โหลดไม่ได้: "
-            + ", ".join(bad["symbol"].astype(str).tolist())
+            + ", ".join(bad_symbols)
             + " | ถ้าเป็น Forex บน Yahoo ให้ลองรูปแบบ EURUSD=X หรือใส่แบบ EURUSD=EURUSD=X"
         )
+    st.table(status_df[visible])
+
+
+def render_symbol_summary(status_df: pd.DataFrame, title: str = "ผลตรวจ Symbols") -> None:
+    st.markdown(f"**{title}**")
+    if status_df.empty:
+        st.warning("ยังไม่มีข้อมูลตรวจ symbol")
+        return
+
+    latest = status_df.drop_duplicates(subset=["symbol"], keep="last")
+    bad = latest[latest["status"] != "OK"]
+    if bad.empty:
+        st.success("Symbols ทุกตัวโหลดข้อมูลได้")
+    else:
+        st.error("Symbol ที่โหลดไม่ได้: " + ", ".join(bad["symbol"].astype(str).tolist()))
+
+    lines = []
+    for row in latest.itertuples(index=False):
+        lines.append(f"{row.symbol}: {row.status} | bars={row.bars} | {row.detail}")
+    st.code("\n".join(lines), language="text")
+
+
+def render_requested_symbol_preview(specs, source_label: str) -> None:
+    rows = []
+    for spec in specs:
+        if source_label == "Local CSV":
+            local_file = DATA_DIR / f"{spec.symbol}.csv"
+            status = "พบไฟล์ CSV" if local_file.exists() else "ยังไม่พบไฟล์ CSV"
+            detail = str(local_file)
+        else:
+            status = "รอดึงข้อมูลตอนกดเริ่มสแกน"
+            detail = "Yahoo symbol: " + spec.provider_symbol
+        rows.append(
+            {
+                "symbol ที่พิมพ์": spec.symbol,
+                "provider_symbol": spec.provider_symbol,
+                "ตรวจเบื้องต้น": status,
+                "detail": detail,
+            }
+        )
+
+    st.subheader("0 ตรวจ Symbols ก่อนสแกน")
+    if not rows:
+        st.warning("ยังไม่ได้ใส่ symbol")
+        return
+    preview_df = pd.DataFrame(rows)
+    missing = preview_df[preview_df["ตรวจเบื้องต้น"] == "ยังไม่พบไฟล์ CSV"]
+    if not missing.empty:
+        st.warning("Local CSV ยังไม่พบไฟล์ของ: " + ", ".join(missing["symbol ที่พิมพ์"].tolist()))
+    if source_label == "Yahoo Finance":
+        st.info("Yahoo Finance: ตารางนี้คือรายการที่จะส่งไปตรวจตอนกดเริ่มสแกน หลังสแกนแล้วจะขึ้น OK / MISSING / NO_DATA")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Symbols", len(preview_df))
+    c2.metric("Data source", source_label)
+    c3.metric("Ready", len(preview_df) - len(missing))
+    st.dataframe(preview_df, use_container_width=True, hide_index=True)
 
 
 def render_pair_movement_charts(prices: pd.DataFrame, plan_df: pd.DataFrame, lookback: int) -> None:
@@ -494,10 +550,10 @@ def render_pair_movement_charts(prices: pd.DataFrame, plan_df: pd.DataFrame, loo
             st.line_chart(spread_view, use_container_width=True)
 
 
-render_hero()
-
-with st.sidebar:
+st.subheader("ตั้งค่า Scan")
+with st.container(border=True):
     st.header("ข้อมูล")
+    st.caption(f"App build: {APP_BUILD}")
     source = st.radio("Source", ["Yahoo Finance", "Local CSV"], index=1, horizontal=True)
     default_symbols = "EURUSD, GBPUSD, AUDUSD, NZDUSD, XAUUSD, XAGUSD"
     symbols_raw = st.text_area(
@@ -507,6 +563,7 @@ with st.sidebar:
         help="ใส่ชื่อย่อ เช่น EURUSD หรือ map ตรง เช่น GOLD=GC=F. Built-ins: "
         + ", ".join(sorted(DEFAULT_SYMBOLS)),
     )
+    run = st.button("เริ่มสแกน", type="primary", key="run")
     st.header("1 เลือกคู่")
     research_period = st.selectbox("Research period", ["6mo", "1y", "2y", "5y"], index=1)
     research_interval = st.selectbox("Research timeframe", ["1d", "1wk"], index=0)
@@ -530,7 +587,12 @@ with st.sidebar:
     exit_z = st.number_input("Exit z-score", min_value=0.0, max_value=3.0, value=0.5, step=0.1)
     stop_z = st.number_input("Stop z-score", min_value=1.0, max_value=8.0, value=3.5, step=0.1)
     notional = st.number_input("Per-pair notional", min_value=100.0, max_value=10_000_000.0, value=10_000.0, step=1000.0)
-    run = st.button("เริ่มสแกน", type="primary")
+
+
+current_specs = parse_symbol_list(symbols_raw)
+render_requested_symbol_preview(current_specs, source)
+
+render_hero()
 
 
 def load_prices(period_value: str, interval_value: str, label: str, specs) -> pd.DataFrame:
@@ -538,35 +600,52 @@ def load_prices(period_value: str, interval_value: str, label: str, specs) -> pd
         output_dir = DATA_DIR / label if save_fetched else None
         try:
             prices = fetch_yahoo_prices(specs, period=period_value, interval=interval_value, output_dir=output_dir)
-            return filter_requested_symbols(prices, specs)
+            return prices
         except Exception as exc:
             cached_dir = DATA_DIR / label
             if cached_dir.exists() and any(cached_dir.glob("*.csv")):
                 st.warning(f"Yahoo Finance ไม่ส่งข้อมูล {label} ชุดใหม่กลับมา แอปจึงใช้ cached {label} CSV แทน รายละเอียด: {exc}")
-                return filter_requested_symbols(load_price_matrix(cached_dir), specs)
+                return load_price_matrix(cached_dir)
             if any(DATA_DIR.glob("*.csv")):
                 st.warning(
                     "Yahoo Finance ไม่ส่งข้อมูลชุดใหม่กลับมา แอปจึงใช้ root Local CSV แทน "
                     f"รายละเอียด: {exc}"
                 )
-                return filter_requested_symbols(load_price_matrix(DATA_DIR), specs)
-            raise
-    return filter_requested_symbols(load_price_matrix(DATA_DIR), specs)
+                return load_price_matrix(DATA_DIR)
+            st.warning(f"Yahoo Finance ไม่ส่งข้อมูล {label} และไม่มี cached CSV ให้ใช้ รายละเอียด: {exc}")
+            return pd.DataFrame()
+    try:
+        return load_price_matrix(DATA_DIR)
+    except Exception as exc:
+        st.warning(f"Local CSV โหลดไม่ได้ รายละเอียด: {exc}")
+        return pd.DataFrame()
 
 
 if run:
     try:
-        specs = parse_symbol_list(symbols_raw)
-        research_prices = load_prices(research_period, research_interval, f"research_{research_interval}", specs)
+        specs = current_specs
+        research_raw_prices = load_prices(research_period, research_interval, f"research_{research_interval}", specs)
         if source == "Local CSV":
-            execution_prices = research_prices.copy()
+            execution_raw_prices = research_raw_prices.copy()
             st.info("โหมด Local CSV ใช้ข้อมูลชุดเดียวกันทั้งการเลือกคู่และจังหวะเข้าเทรด ถ้าต้องการแยก 1d กับ 1h ให้ใช้ Yahoo Finance.")
         else:
-            execution_prices = load_prices(execution_period, execution_interval, f"execution_{execution_interval}", specs)
+            execution_raw_prices = load_prices(execution_period, execution_interval, f"execution_{execution_interval}", specs)
 
-        research_symbol_status = build_symbol_status(specs, research_prices, f"research_{research_interval}", source)
-        execution_symbol_status = build_symbol_status(specs, execution_prices, f"execution_{execution_interval}", source)
+        research_symbol_status = build_symbol_status(specs, research_raw_prices, f"research_{research_interval}", source)
+        execution_symbol_status = build_symbol_status(specs, execution_raw_prices, f"execution_{execution_interval}", source)
         symbol_status = pd.concat([research_symbol_status, execution_symbol_status], ignore_index=True)
+
+        add_workflow_summary(research_interval, execution_interval)
+        render_symbol_status(symbol_status)
+        EXPORT_DIR.mkdir(exist_ok=True)
+        symbol_status.to_csv(EXPORT_DIR / "symbol_status.csv", index=False)
+
+        research_prices = filter_requested_symbols(research_raw_prices, specs)
+        execution_prices = filter_requested_symbols(execution_raw_prices, specs)
+
+        if len(research_prices.columns) < 2:
+            st.error("ต้องมี symbol ที่โหลดข้อมูลได้อย่างน้อย 2 ตัว จึงจะ scan pair ได้")
+            st.stop()
 
         pairs = scan_pairs(
             research_prices,
@@ -586,9 +665,6 @@ if run:
             max_half_life=float(max_half_life),
             max_cost_bps=float(max_cost_bps),
         )
-
-        add_workflow_summary(research_interval, execution_interval)
-        render_symbol_status(symbol_status)
 
         st.subheader("1 ข้อมูลสำหรับเลือกคู่")
         st.caption(
@@ -682,6 +758,7 @@ if run:
             plan_df.to_csv(plan_path, index=False)
             plan_df.to_json(json_path, orient="records", indent=2)
 
+            render_symbol_summary(symbol_status, "ตรวจ Symbols ก่อนดูแผนเทรด")
             st.subheader("3 จังหวะเข้าเทรดและแผนสำหรับ robot")
             st.caption(
                 f"คำนวณ z-score, action และ hedge ratio ด้วย {execution_interval}. "

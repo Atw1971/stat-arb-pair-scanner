@@ -16,7 +16,7 @@ from stat_arb_bot.scanner import scan_pair_diagnostics, scan_pairs
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 EXPORT_DIR = ROOT / "exports"
-APP_BUILD = "symbol-check-2026-06-14"
+APP_BUILD = "show-all-pairs-2026-06-14"
 
 report_module = importlib.reload(report_module)
 build_trade_plan = report_module.build_trade_plan
@@ -300,52 +300,58 @@ def render_hero() -> None:
 
 
 def render_plan_cards(plan_df: pd.DataFrame) -> None:
-    columns = st.columns(min(3, len(plan_df.head(3))))
-    for column, row in zip(columns, plan_df.head(3).itertuples(index=False)):
-        values = row._asdict()
-        action = str(values["action"])
-        z_value = values.get("execution_z_score", values.get("z_score", 0.0))
-        hedge_value = values.get("execution_hedge_ratio", values.get("hedge_ratio", 0.0))
-        corr_value = values.get("research_correlation", values.get("correlation", 0.0))
-        stability_value = values.get("research_stability", values.get("stability", 0.0))
-        execution_days = values.get("execution_half_life_days", values.get("execution_half_life", 0.0))
-        research_days = values.get("research_half_life_days", values.get("research_half_life", 0.0))
-        risk_warning = str(values.get("risk_warning", ""))
-        with column:
-            with st.container(border=True):
-                st.markdown(f"**{values['symbol_a']} / {values['symbol_b']}**")
-                st.write(
-                    {
-                        values["symbol_a"]: values.get("symbol_a_side", "NO_POSITION"),
-                        values["symbol_b"]: values.get("symbol_b_side", "NO_POSITION"),
-                        "signal": values.get("signal", "NO_POSITION"),
-                    }
-                )
-                if action.startswith("OPEN_POSITION"):
-                    st.error(action)
-                elif action.startswith("NO_POSITION"):
-                    st.warning(action)
-                else:
-                    st.success(action)
-                if risk_warning.startswith("HIGH_RISK"):
-                    st.error(risk_warning)
-                elif risk_warning.startswith("CAUTION"):
-                    st.warning(risk_warning)
-                elif risk_warning.startswith("OK"):
-                    st.success(risk_warning)
-                st.metric("Execution z-score", f"{z_value:.2f}")
-                st.metric("Execution hedge ratio", f"{hedge_value:.4f}")
-                st.write(
-                    {
-                        "research correlation": round(corr_value, 3),
-                        "research stability": round(stability_value, 3),
-                        "research half-life days": round(research_days, 1),
-                        "execution half-life days": round(execution_days, 1),
-                        "leg notional ratio": round(values.get("leg_notional_ratio", 0.0), 2),
-                        "leg A notional": round(values["leg_a_notional"], 2),
-                        "leg B notional": round(values["leg_b_notional"], 2),
-                    }
-                )
+    for start in range(0, len(plan_df), 3):
+        row_df = plan_df.iloc[start : start + 3]
+        columns = st.columns(len(row_df))
+        for column, row in zip(columns, row_df.itertuples(index=False)):
+            render_plan_card(column, row)
+
+
+def render_plan_card(column, row) -> None:
+    values = row._asdict()
+    action = str(values["action"])
+    z_value = values.get("execution_z_score", values.get("z_score", 0.0))
+    hedge_value = values.get("execution_hedge_ratio", values.get("hedge_ratio", 0.0))
+    corr_value = values.get("research_correlation", values.get("correlation", 0.0))
+    stability_value = values.get("research_stability", values.get("stability", 0.0))
+    execution_days = values.get("execution_half_life_days", values.get("execution_half_life", 0.0))
+    research_days = values.get("research_half_life_days", values.get("research_half_life", 0.0))
+    risk_warning = str(values.get("risk_warning", ""))
+    with column:
+        with st.container(border=True):
+            st.markdown(f"**{values['symbol_a']} / {values['symbol_b']}**")
+            st.write(
+                {
+                    values["symbol_a"]: values.get("symbol_a_side", "NO_POSITION"),
+                    values["symbol_b"]: values.get("symbol_b_side", "NO_POSITION"),
+                    "signal": values.get("signal", "NO_POSITION"),
+                }
+            )
+            if action.startswith("OPEN_POSITION"):
+                st.error(action)
+            elif action.startswith("NO_POSITION"):
+                st.warning(action)
+            else:
+                st.success(action)
+            if risk_warning.startswith("HIGH_RISK"):
+                st.error(risk_warning)
+            elif risk_warning.startswith("CAUTION"):
+                st.warning(risk_warning)
+            elif risk_warning.startswith("OK"):
+                st.success(risk_warning)
+            st.metric("Execution z-score", f"{z_value:.2f}")
+            st.metric("Execution hedge ratio", f"{hedge_value:.4f}")
+            st.write(
+                {
+                    "research correlation": round(corr_value, 3),
+                    "research stability": round(stability_value, 3),
+                    "research half-life days": round(research_days, 1),
+                    "execution half-life days": round(execution_days, 1),
+                    "leg notional ratio": round(values.get("leg_notional_ratio", 0.0), 2),
+                    "leg A notional": round(values["leg_a_notional"], 2),
+                    "leg B notional": round(values["leg_b_notional"], 2),
+                }
+            )
 
 
 def add_workflow_summary(research_tf: str, execution_tf: str) -> None:
@@ -512,7 +518,8 @@ def render_pair_movement_charts(prices: pd.DataFrame, plan_df: pd.DataFrame, loo
         "กราฟล่างดู spread และ z-score เพื่อดูว่าคู่เริ่มแยกออกจากค่าเฉลี่ยหรือยัง."
     )
 
-    for row in plan_df.head(2).itertuples(index=False):
+    chart_count = 0
+    for row in plan_df.itertuples(index=False):
         values = row._asdict()
         symbol_a = values["symbol_a"]
         symbol_b = values["symbol_b"]
@@ -538,6 +545,7 @@ def render_pair_movement_charts(prices: pd.DataFrame, plan_df: pd.DataFrame, loo
         )
 
         with st.expander(f"{symbol_a} / {symbol_b} - กราฟการวิ่งตามกัน", expanded=True):
+            chart_count += 1
             c1, c2, c3 = st.columns(3)
             c1.metric("ล่าสุด z-score", f"{values.get('execution_z_score', 0.0):.2f}")
             c2.metric("hedge ratio", f"{beta:.4f}")
@@ -548,6 +556,9 @@ def render_pair_movement_charts(prices: pd.DataFrame, plan_df: pd.DataFrame, loo
 
             st.markdown("**Spread และ z-score: ใช้ดูการแยกออกจากค่าเฉลี่ย**")
             st.line_chart(spread_view, use_container_width=True)
+
+    if chart_count == 0:
+        st.info("ยังไม่มีข้อมูลพอสำหรับวาดกราฟของคู่ที่เลือก.")
 
 
 st.subheader("ตั้งค่า Scan")
@@ -802,7 +813,7 @@ if run:
                 st.download_button("Download trade_plan.json", json_path.read_text(), "trade_plan.json")
                 render_pair_movement_charts(execution_prices, plan_df, int(execution_lookback))
 
-            for plan in plans[:3]:
+            for plan in plans:
                 with st.expander(f"{plan.symbol_a} / {plan.symbol_b}: {plan.action}"):
                     st.write(
                         {

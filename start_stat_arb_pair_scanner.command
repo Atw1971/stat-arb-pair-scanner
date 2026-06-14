@@ -77,12 +77,14 @@ ensure_environment() {
 
 start_server() {
   write_log "Starting Streamlit server on $HOST:$PORT"
-  osascript <<APPLESCRIPT
-tell application "Terminal"
-  activate
-  do script "cd " & quoted form of "$PROJECT_DIR" & "; nohup " & quoted form of "$STREAMLIT_BIN" & " run app.py --server.port ${PORT} --server.address ${HOST} --server.fileWatcherType none --server.headless true --browser.gatherUsageStats false > " & quoted form of "$LOG_FILE" & " 2>&1 &"
-end tell
-APPLESCRIPT
+  cd "$PROJECT_DIR"
+  nohup "$STREAMLIT_BIN" run app.py \
+    --server.port "$PORT" \
+    --server.address "$HOST" \
+    --server.fileWatcherType none \
+    --server.headless true \
+    --browser.gatherUsageStats false \
+    >"$LOG_FILE" 2>&1 &
 }
 
 wait_for_health() {

@@ -384,6 +384,71 @@ def add_half_life_units(df: pd.DataFrame, prefix: str, timeframe: str) -> pd.Dat
     return df
 
 
+def filter_requested_symbols(prices: pd.DataFrame, specs) -> pd.DataFrame:
+    requested = [spec.symbol for spec in specs]
+    available = [symbol for symbol in requested if symbol in prices.columns]
+    if not available:
+        raise ValueError(
+            "ไม่มีข้อมูลราคาสำหรับ symbols ที่พิมพ์ไว้เลย กรุณาตรวจชื่อ symbol หรือเลือก data source ให้ถูกต้อง"
+        )
+    return prices[available].dropna(how="all")
+
+
+def build_symbol_status(specs, prices: pd.DataFrame, data_label: str, source_label: str) -> pd.DataFrame:
+    rows = []
+    for spec in specs:
+        if spec.symbol in prices.columns:
+            series = prices[spec.symbol].dropna()
+            bars = int(series.shape[0])
+            if bars > 0:
+                status = "OK"
+                detail = "โหลดข้อมูลได้"
+                first_time = series.index.min()
+                last_time = series.index.max()
+            else:
+                status = "NO_DATA"
+                detail = "มี column แต่ไม่มีราคาที่ใช้ได้"
+                first_time = None
+                last_time = None
+        else:
+            bars = 0
+            status = "MISSING"
+            first_time = None
+            last_time = None
+            if source_label == "Local CSV":
+                detail = f"ไม่พบไฟล์ data/{spec.symbol}.csv"
+            else:
+                detail = "Yahoo/cache ไม่ส่งข้อมูลกลับมา อาจสะกดผิดหรือ provider symbol ไม่รองรับ"
+
+        rows.append(
+            {
+                "symbol": spec.symbol,
+                "provider_symbol": spec.provider_symbol,
+                "data": data_label,
+                "status": status,
+                "bars": bars,
+                "first": first_time,
+                "last": last_time,
+                "detail": detail,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def render_symbol_status(status_df: pd.DataFrame) -> None:
+    st.subheader("0 ตรวจ Symbols")
+    st.caption("เช็กก่อนว่า symbol ที่พิมพ์ไว้โหลดราคาได้จริงไหม ถ้าขึ้น MISSING หรือ NO_DATA คู่นั้นจะไม่ถูกนำไป scan.")
+    visible = ["symbol", "provider_symbol", "data", "status", "bars", "first", "last", "detail"]
+    st.dataframe(status_df[visible], use_container_width=True)
+    bad = status_df[status_df["status"] != "OK"]
+    if not bad.empty:
+        st.warning(
+            "มี symbol ที่โหลดไม่ได้: "
+            + ", ".join(bad["symbol"].astype(str).tolist())
+            + " | ถ้าเป็น Forex บน Yahoo ให้ลองรูปแบบ EURUSD=X หรือใส่แบบ EURUSD=EURUSD=X"
+        )
+
+
 def render_pair_movement_charts(prices: pd.DataFrame, plan_df: pd.DataFrame, lookback: int) -> None:
     st.subheader("4 กราฟดูการวิ่งตามกันของ pair")
     st.caption(
@@ -468,35 +533,40 @@ with st.sidebar:
     run = st.button("เริ่มสแกน", type="primary")
 
 
-def load_prices(period_value: str, interval_value: str, label: str) -> pd.DataFrame:
+def load_prices(period_value: str, interval_value: str, label: str, specs) -> pd.DataFrame:
     if source == "Yahoo Finance":
-        specs = parse_symbol_list(symbols_raw)
         output_dir = DATA_DIR / label if save_fetched else None
         try:
-            return fetch_yahoo_prices(specs, period=period_value, interval=interval_value, output_dir=output_dir)
+            prices = fetch_yahoo_prices(specs, period=period_value, interval=interval_value, output_dir=output_dir)
+            return filter_requested_symbols(prices, specs)
         except Exception as exc:
             cached_dir = DATA_DIR / label
             if cached_dir.exists() and any(cached_dir.glob("*.csv")):
                 st.warning(f"Yahoo Finance ไม่ส่งข้อมูล {label} ชุดใหม่กลับมา แอปจึงใช้ cached {label} CSV แทน รายละเอียด: {exc}")
-                return load_price_matrix(cached_dir)
+                return filter_requested_symbols(load_price_matrix(cached_dir), specs)
             if any(DATA_DIR.glob("*.csv")):
                 st.warning(
                     "Yahoo Finance ไม่ส่งข้อมูลชุดใหม่กลับมา แอปจึงใช้ root Local CSV แทน "
                     f"รายละเอียด: {exc}"
                 )
-                return load_price_matrix(DATA_DIR)
+                return filter_requested_symbols(load_price_matrix(DATA_DIR), specs)
             raise
-    return load_price_matrix(DATA_DIR)
+    return filter_requested_symbols(load_price_matrix(DATA_DIR), specs)
 
 
 if run:
     try:
-        research_prices = load_prices(research_period, research_interval, f"research_{research_interval}")
+        specs = parse_symbol_list(symbols_raw)
+        research_prices = load_prices(research_period, research_interval, f"research_{research_interval}", specs)
         if source == "Local CSV":
             execution_prices = research_prices.copy()
             st.info("โหมด Local CSV ใช้ข้อมูลชุดเดียวกันทั้งการเลือกคู่และจังหวะเข้าเทรด ถ้าต้องการแยก 1d กับ 1h ให้ใช้ Yahoo Finance.")
         else:
-            execution_prices = load_prices(execution_period, execution_interval, f"execution_{execution_interval}")
+            execution_prices = load_prices(execution_period, execution_interval, f"execution_{execution_interval}", specs)
+
+        research_symbol_status = build_symbol_status(specs, research_prices, f"research_{research_interval}", source)
+        execution_symbol_status = build_symbol_status(specs, execution_prices, f"execution_{execution_interval}", source)
+        symbol_status = pd.concat([research_symbol_status, execution_symbol_status], ignore_index=True)
 
         pairs = scan_pairs(
             research_prices,
@@ -518,6 +588,7 @@ if run:
         )
 
         add_workflow_summary(research_interval, execution_interval)
+        render_symbol_status(symbol_status)
 
         st.subheader("1 ข้อมูลสำหรับเลือกคู่")
         st.caption(
@@ -602,10 +673,12 @@ if run:
             EXPORT_DIR.mkdir(exist_ok=True)
             pairs_path = EXPORT_DIR / "candidate_pairs.csv"
             diagnostics_path = EXPORT_DIR / "pair_diagnostics.csv"
+            symbol_status_path = EXPORT_DIR / "symbol_status.csv"
             plan_path = EXPORT_DIR / "trade_plan.csv"
             json_path = EXPORT_DIR / "trade_plan.json"
             pairs.to_csv(pairs_path, index=False)
             diagnostics.to_csv(diagnostics_path, index=False)
+            symbol_status.to_csv(symbol_status_path, index=False)
             plan_df.to_csv(plan_path, index=False)
             plan_df.to_json(json_path, orient="records", indent=2)
 

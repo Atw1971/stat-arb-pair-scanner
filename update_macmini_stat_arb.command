@@ -4,7 +4,7 @@ set -euo pipefail
 
 MACMINI_USER="waratat"
 MACMINI_HOST="192.168.1.35"
-KEY_PATH="$HOME/.ssh/id_ed25519_github_codex"
+KEY_PATH="$HOME/.ssh/id_ed25519"
 REPO_SSH="git@github.com:Atw1971/stat-arb-pair-scanner.git"
 REPO_DIR="\$HOME/Documents/stat-arb-pair-scanner"
 

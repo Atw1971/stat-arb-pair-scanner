@@ -4,7 +4,7 @@ set -euo pipefail
 
 MACMINI_USER="waratat"
 MACMINI_HOST="192.168.1.35"
-KEY_PATH="$HOME/.ssh/id_ed25519_github_codex"
+KEY_PATH="$HOME/.ssh/id_ed25519"
 PUB_KEY_PATH="${KEY_PATH}.pub"
 
 if [[ ! -f "$PUB_KEY_PATH" ]]; then

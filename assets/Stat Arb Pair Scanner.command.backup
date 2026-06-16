@@ -1,8 +1,18 @@
 #!/bin/zsh
-cd "/Users/waratatkupongsak/Documents/Codex/2026-05-26/new-chat" || exit 1
+
+set -euo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_DIR"
 
 if ! /usr/bin/curl -s "http://127.0.0.1:8510" >/dev/null 2>&1; then
-  /opt/anaconda3/bin/streamlit run app.py \
+  if [[ -x "$PROJECT_DIR/.venv/bin/streamlit" ]]; then
+    STREAMLIT_BIN="$PROJECT_DIR/.venv/bin/streamlit"
+  else
+    STREAMLIT_BIN="$(command -v streamlit)"
+  fi
+
+  "$STREAMLIT_BIN" run app.py \
     --server.port 8510 \
     --server.address 127.0.0.1 \
     --server.fileWatcherType none \

@@ -16,6 +16,8 @@ git add \
   start_stat_arb_pair_scanner.command \
   fix_macbook_launcher.command \
   force_restart_stat_arb.command \
+  install_desktop_app.command \
+  "Stat Arb Pair Scanner.app/Contents/MacOS/launcher" \
   setup_macmini_ssh.command \
   sync_to_macmini_stat_arb.command \
   update_macmini_stat_arb.command \
